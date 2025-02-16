@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ### AL ###
 #Template for AL projects for Dynamics 365 Business Central
 #launch.json folder
@@ -20,3 +21,7 @@ rad.json
 *.flf
 #Test results file
 TestResults.xml
+=======
+venv310
+.vscode/
+>>>>>>> b6c4b95 (basic modules made)
