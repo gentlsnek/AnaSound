@@ -1,16 +1,12 @@
 import subprocess
+from anachange import change_pitch
 
-def split_audio(input_audio, output_folder="demucs_output"):
-    command = [
-        "demucs",
-        "--two-stems=vocals", output_folder,
-        input_audio
-    ]
+def split_audio(input_audio, output_folder="separated"):
+    command = ["demucs"," --two-stems=vocals" ,input_audio,output_folder]
     subprocess.run(command)
     print(f"Separation complete! Check the '{output_folder}' folder.")
-
-
-if __name__ == "__main__":
-    input_audio = "test.mp3"  # Change this to your file
-    split_audio(input_audio)
     
+    change_pitch(f"{output_folder}/vocals.wav", 2)
+    
+    
+

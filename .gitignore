@@ -30,3 +30,5 @@ venv310
 .vscode/
 >>>>>>> b6c4b95 (basic modules made)
 >>>>>>> master
+separated/
+__pycache__/
