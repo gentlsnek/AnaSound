@@ -1,7 +1,7 @@
-import librosa as lb
 import numpy as np
 import os
 from combine import combine
+from pydub import AudioSegment
 
 def process_vocals(input_audio, output_folder="separated"):
     model = "mdx_extra"
@@ -11,66 +11,52 @@ def process_vocals(input_audio, output_folder="separated"):
     if not os.path.exists(vocals_path):
         raise FileNotFoundError(f"Error: {vocals_path} not found. Check if Demucs completed successfully.")
 
-    y, sr = lb.load(vocals_path, sr=None)  # Load without resampling
-    y = y.astype(np.float32)  # Ensure float format
+    return vocals_path
 
-    return y, sr
-
-def tag_audio_sections(y, sr, hop_length=1024, low_thresh=500, mid_thresh=2000):
+def tag_audio_sections(vocals_path, low_thresh=500, mid_thresh=2000):
     """Tags sections of the audio into High, Medium, and Low based on dominant frequency range."""
     
-    # Compute STFT
-    S = np.abs(lb.stft(y, n_fft=2048, hop_length=hop_length))
-
-    # Get frequency bins
-    freqs = lb.fft_frequencies(sr=sr, n_fft=2048)
-
-    # Identify frequency indices
-    low_idx = np.where(freqs < low_thresh)[0]
-    mid_idx = np.where((freqs >= low_thresh) & (freqs < mid_thresh))[0]
-    high_idx = np.where(freqs >= mid_thresh)[0]
-
-    # Compute energy in each band over time
-    low_energy = np.sum(S[low_idx, :], axis=0)
-    mid_energy = np.sum(S[mid_idx, :], axis=0)
-    high_energy = np.sum(S[high_idx, :], axis=0)
-
-    # Assign tags based on dominant energy
-    tags = []
-    times = lb.times_like(low_energy, sr=sr, hop_length=hop_length)
+    audio = AudioSegment.from_wav(vocals_path)
+    samples = np.array(audio.get_array_of_samples())
     
-    prev_tag = None
-    tag_list = []
+    # Split into chunks (e.g., 100ms)
+    chunk_size = audio.frame_rate // 10  # 100ms chunks
+    num_chunks = len(samples) // chunk_size
+    
+    tags = []
     time_intervals = []
     
-    start_time = times[0]
-    
-    for i in range(len(times)):
-        if high_energy[i] > mid_energy[i] and high_energy[i] > low_energy[i]:
+    for i in range(num_chunks):
+        start_time = i * 0.1
+        end_time = (i + 1) * 0.1
+
+        chunk = samples[i * chunk_size:(i + 1) * chunk_size]
+        power_spectrum = np.abs(np.fft.rfft(chunk))  # Compute FFT
+        
+        freqs = np.fft.rfftfreq(len(chunk), d=1/audio.frame_rate)
+        low_energy = power_spectrum[freqs < low_thresh].sum()
+        mid_energy = power_spectrum[(freqs >= low_thresh) & (freqs < mid_thresh)].sum()
+        high_energy = power_spectrum[freqs >= mid_thresh].sum()
+
+        if high_energy > mid_energy and high_energy > low_energy:
             current_tag = "high"
-        elif mid_energy[i] > low_energy[i]:
+        elif mid_energy > low_energy:
             current_tag = "medium"
         else:
             current_tag = "low"
 
-        # If tag changes, store previous segment
-        if current_tag != prev_tag and prev_tag is not None:
-            time_intervals.append((round(start_time, 2), round(times[i], 2)))
-            tag_list.append(prev_tag)
-            start_time = times[i]  # New start time for next segment
+        if not tags or tags[-1] != current_tag:
+            tags.append(current_tag)
+            time_intervals.append((round(start_time, 2), round(end_time, 2)))
+            
         
-        prev_tag = current_tag
-
-    # Append the last segment
-    if prev_tag is not None:
-        time_intervals.append((round(start_time, 2), round(times[-1], 2)))
-        tag_list.append(prev_tag)
-
-    return tag_list, time_intervals
+    print(f"Detected tags: {tags}")
+    print(f"Time intervals: {time_intervals}")
+    return tags, time_intervals
 
 def scan(input_audio, output_folder="separated"):
-    y, sr = process_vocals(input_audio, output_folder)
-    tags, intervals = tag_audio_sections(y, sr)
+    vocals_path = process_vocals(input_audio, output_folder)
+    tags, intervals = tag_audio_sections(vocals_path)
     filename = os.path.basename(input_audio).rsplit(".", 1)[0]
 
-    combine(tags, intervals,filename)
+    combine(tags, intervals, filename)
